@@ -1,0 +1,159 @@
+{
+  "Actions": [
+    {
+      "UUID": "com.plbogen.lcarsdock.app.messages",
+      "Name": "Android Messages",
+      "Icon": "icons/messages.png",
+      "Tooltip": "Live Android Messages unread count; press to focus",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "icons/messages.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.app.gmail",
+      "Name": "Gmail",
+      "Icon": "icons/gmail.png",
+      "Tooltip": "Live Gmail unread + inbox count; press to focus",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "icons/gmail.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.app.calendar",
+      "Name": "Calendar",
+      "Icon": "icons/calendar.png",
+      "Tooltip": "Live next Google Calendar event; press to focus",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "icons/calendar.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.spotify.nowplaying",
+      "Name": "Spotify Now Playing",
+      "Icon": "icons/spotify.png",
+      "Tooltip": "LCARS Spotify album art & track; press to play/pause",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "icons/spotify.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.spotify.prev",
+      "Name": "Spotify Previous",
+      "Icon": "icons/spotify_prev.png",
+      "Tooltip": "Previous Spotify track",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "icons/spotify_prev.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.spotify.next",
+      "Name": "Spotify Next",
+      "Icon": "icons/spotify_next.png",
+      "Tooltip": "Next Spotify track with queue preview",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "icons/spotify_next.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.spotify.like",
+      "Name": "Spotify Like",
+      "Icon": "icons/spotify.png",
+      "Tooltip": "Live Spotify liked status; press to save/unsave",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "icons/spotify.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.meet.focus",
+      "Name": "Meet Window",
+      "Icon": "icons/meet.png",
+      "Tooltip": "Focus or minimize Google Meet tab",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "icons/meet.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.meet.mic",
+      "Name": "Meet Mic",
+      "Icon": "icons/meet_mic.png",
+      "Tooltip": "Live Google Meet mic status; press to mute/unmute",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "icons/meet_mic.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.meet.cam",
+      "Name": "Meet Camera",
+      "Icon": "icons/meet_cam.png",
+      "Tooltip": "Live Google Meet camera status; press to toggle",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "icons/meet_cam.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.meet.hand",
+      "Name": "Meet Hand",
+      "Icon": "icons/meet_hand.png",
+      "Tooltip": "Live Google Meet raise hand status; press to toggle",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "icons/meet_hand.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.widget.clock",
+      "Name": "LCARS Clock",
+      "Icon": "icons/category.png",
+      "Tooltip": "LCARS digital clock & stardate",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "States": [{ "Image": "icons/category.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.widget.date",
+      "Name": "LCARS Date",
+      "Icon": "icons/calendar.png",
+      "Tooltip": "LCARS calendar date widget",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "States": [{ "Image": "icons/calendar.png" }]
+    },
+    {
+      "UUID": "com.plbogen.lcarsdock.widget.weather",
+      "Name": "LCARS Weather",
+      "Icon": "icons/category.png",
+      "Tooltip": "LCARS live local weather widget; press to refresh",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": false,
+      "States": [{ "Image": "icons/category.png" }]
+    }
+  ],
+  "Version": "1.0.0",
+  "Name": "LCARS Dock",
+  "Icon": "icons/category.png",
+  "CategoryIcon": "icons/category.png",
+  "Category": "LCARS Dock",
+  "Description": "External-safe LCARS StreamDock controls for Spotify, Google Meet, Android Messages, Clock, Date, and Weather.",
+  "CodePath": "index.html",
+  "SDKVersion": 1,
+  "Author": "Paul Bogen",
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "10.15"
+    }
+  ]
+}

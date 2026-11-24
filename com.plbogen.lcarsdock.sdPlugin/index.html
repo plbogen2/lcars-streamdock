@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><title>LCARS Dock Plugin</title></head>
+<body>
+<canvas id="c" width="144" height="144"></canvas>
+<script>
+const BRIDGE = 'http://127.0.0.1:15890';
+const canvas = document.getElementById('c');
+const ctx2d = canvas.getContext('2d');
+
+let sdWs = null;
+const contexts = new Map();
+const lastKeys = new Map();
+let latestState = {
+  apps: {},
+  weather: { tempF: '', cond: '', highF: '', lowF: '', city: '' },
+  spotify: { running: false, playing: false, track: '', artist: '', album: '', artworkUrl: '', liked: false, nextTrack: '', nextArtist: '' },
+};
+let artUrlLoaded = '';
+let artImg = null;
+let artReady = false;
+let blinkPhase = false;
+
+function rr(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+function wrapLines(text, maxWidth, maxLines) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const test = cur ? cur + ' ' + w : w;
+    if (ctx2d.measureText(test).width <= maxWidth) {
+      cur = test;
+    } else {
+      if (cur) lines.push(cur);
+      cur = w;
+      if (lines.length >= maxLines) break;
+    }
+  }
+  if (cur && lines.length < maxLines) lines.push(cur);
+  if (lines.length === maxLines && words.join(' ').length > lines.join(' ').length) {
+    let last = lines[maxLines - 1];
+    while (last.length > 3 && ctx2d.measureText(last + '...').width > maxWidth) {
+      last = last.slice(0, -1);
+    }
+    lines[maxLines - 1] = last + '...';
+  }
+  return lines;
+}
+
+function drawLcarsCard(barColor, label, accentColor, pulse = false) {
+  ctx2d.clearRect(0, 0, 144, 144);
+  ctx2d.fillStyle = '#000000';
+  ctx2d.fillRect(0, 0, 144, 144);
+  const c = pulse && blinkPhase ? '#ffcc00' : barColor;
+  ctx2d.fillStyle = c;
+  rr(ctx2d, 6, 6, 18, 132, 9);
+  ctx2d.fill();
+  rr(ctx2d, 6, 6, 132, 26, 13);
+  ctx2d.fill();
+  ctx2d.fillStyle = '#000000';
+  rr(ctx2d, 24, 32, 114, 106, 10);
+  ctx2d.fill();
+  ctx2d.fillStyle = accentColor || c;
+  rr(ctx2d, 30, 126, 104, 10, 5);
+  ctx2d.fill();
+  ctx2d.textAlign = 'right';
+  ctx2d.textBaseline = 'middle';
+  ctx2d.font = 'bold 14px -apple-system, sans-serif';
+  ctx2d.fillStyle = '#000000';
+  ctx2d.fillText(label, 130, 20);
+}
+
+function renderApp(title, sub, appObj, brandActive, brandIdle) {
+  const running = Boolean(appObj?.running);
+  const notify = Boolean(appObj?.notify);
+  const rawCnt = String(appObj?.count || '').trim();
+  const numCnt = /^\d+\+?$/.test(rawCnt) ? rawCnt : '';
+  const header = (sub ? `${title} ${sub}` : title).toUpperCase();
+
+  if (notify) {
+    drawLcarsCard(brandActive, header, '#ffcc00', true);
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    ctx2d.font = 'bold 46px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#ffffff';
+    ctx2d.fillText(numCnt || '!', 80, 70);
+    ctx2d.font = 'bold 12px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#ffcc00';
+    ctx2d.fillText(numCnt ? 'UNREAD' : 'NEW MSG', 80, 104);
+  } else if (running) {
+    drawLcarsCard(brandIdle, header, brandActive, false);
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    if (appObj?.hasCount) {
+      ctx2d.font = 'bold 42px -apple-system, sans-serif';
+      ctx2d.fillStyle = brandActive;
+      ctx2d.fillText('0', 80, 70);
+      ctx2d.font = 'bold 11px -apple-system, sans-serif';
+      ctx2d.fillStyle = '#9999cc';
+      ctx2d.fillText('UNREAD', 80, 104);
+    } else {
+      ctx2d.font = 'bold 20px -apple-system, sans-serif';
+      ctx2d.fillStyle = '#ffffff';
+      ctx2d.fillText('OPEN', 80, 78);
+    }
+  } else {
+    drawLcarsCard('#475569', header, '#334155', false);
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    ctx2d.font = 'bold 16px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#64748b';
+    ctx2d.fillText('OFFLINE', 80, 78);
+  }
+}
+
+function renderGmail() {
+  const app = latestState.apps?.gmail || {};
+  const gm = latestState.workspace?.gmail || {};
+  const totalLabel = gm.inboxTotalLabel || '';
+  const hasApiUnread = typeof gm.inboxUnread === 'number';
+  const unread = hasApiUnread ? gm.inboxUnread : 0;
+  const unreadLabel = hasApiUnread
+    ? (gm.inboxUnreadLabel || String(unread))
+    : (app.count && /^\d+\+?$/.test(app.count) ? app.count : '');
+  const hasUnread = unread > 0 || Boolean(app.notify);
+
+  drawLcarsCard(hasUnread ? '#ff4444' : '#cc4444', 'GMAIL', hasUnread ? '#ffcc00' : '#993333', hasUnread);
+  ctx2d.textAlign = 'center';
+  ctx2d.textBaseline = 'middle';
+
+  if (unreadLabel) {
+    ctx2d.font = 'bold 46px -apple-system, sans-serif';
+    ctx2d.fillStyle = hasUnread ? '#ffcc00' : '#ffffff';
+    ctx2d.fillText(unreadLabel, 80, 68);
+    ctx2d.font = 'bold 11px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#ff9966';
+    ctx2d.fillText('UNREAD', 80, 96);
+    if (totalLabel) {
+      ctx2d.font = 'bold 11px -apple-system, sans-serif';
+      ctx2d.fillStyle = '#9999cc';
+      ctx2d.fillText(`${totalLabel} INBOX`, 80, 113);
+    }
+  } else {
+    ctx2d.font = 'bold 20px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#ffffff';
+    ctx2d.fillText(app.running ? (hasUnread ? 'NEW' : 'OPEN') : 'OFFLINE', 80, 78);
+  }
+}
+
+function renderCalendar() {
+  const cal = latestState.workspace?.calendar || {};
+  const ev = cal.nextEvent;
+  if (!ev) {
+    drawLcarsCard('#9999ff', 'CALENDAR', '#6666cc');
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    ctx2d.font = 'bold 15px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#cc99cc';
+    ctx2d.fillText('CLEAR TODAY', 80, 78);
+    return;
+  }
+
+  const urgent = ev.inProgress || ev.minutesUntil <= 10;
+  const timeTag = ev.inProgress ? 'NOW' : (ev.minutesUntil <= 60 ? `T-${ev.minutesUntil}M` : ev.startTime);
+  const bar = ev.inProgress ? '#33cc99' : (urgent ? '#ff9900' : '#9999ff');
+  drawLcarsCard(bar, timeTag, urgent ? '#ffcc00' : '#cc99cc', urgent);
+
+  ctx2d.textAlign = 'center';
+  ctx2d.textBaseline = 'middle';
+  ctx2d.font = 'bold 14px -apple-system, sans-serif';
+  ctx2d.fillStyle = '#ffffff';
+  const lines = wrapLines(ev.title, 102, 3);
+  const startY = lines.length === 1 ? 78 : (lines.length === 2 ? 68 : 58);
+  lines.forEach((ln, i) => ctx2d.fillText(ln, 81, startY + i * 19));
+
+  if (!ev.inProgress && ev.minutesUntil <= 60) {
+    ctx2d.font = 'bold 11px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#ff9900';
+    ctx2d.fillText(ev.startTime, 80, 115);
+  }
+}
+
+function renderSpotifyNowPlaying() {
+  const sp = latestState.spotify || {};
+  const bar = sp.playing ? '#33cc99' : '#ff9900';
+  drawLcarsCard(bar, sp.playing ? '▶ PLAY' : '⏸ PAUSE', sp.playing ? '#66ccff' : '#ffcc00');
+
+  if (artReady && artImg) {
+    try {
+      ctx2d.save();
+      rr(ctx2d, 26, 34, 110, 88, 10);
+      ctx2d.clip();
+      ctx2d.drawImage(artImg, 26, 34, 110, 88);
+      const grad = ctx2d.createLinearGradient(0, 42, 0, 122);
+      grad.addColorStop(0, 'rgba(0,0,0,0.18)');
+      grad.addColorStop(0.55, 'rgba(0,0,0,0.72)');
+      grad.addColorStop(1, 'rgba(0,0,0,0.92)');
+      ctx2d.fillStyle = grad;
+      ctx2d.fillRect(26, 34, 110, 88);
+      ctx2d.restore();
+    } catch {}
+  }
+
+  ctx2d.textAlign = 'center';
+  ctx2d.textBaseline = 'middle';
+  if (!sp.running || !sp.track) {
+    ctx2d.font = 'bold 16px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#33cc99';
+    ctx2d.fillText('SPOTIFY', 81, 70);
+    ctx2d.font = 'bold 11px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#9999cc';
+    ctx2d.fillText(sp.running ? 'PAUSED' : 'OFFLINE', 81, 96);
+    return;
+  }
+
+  ctx2d.font = 'bold 14px -apple-system, sans-serif';
+  ctx2d.fillStyle = '#ffffff';
+  const tLines = wrapLines(sp.track, 102, 2);
+  const base = tLines.length === 1 ? 86 : 76;
+  tLines.forEach((ln, i) => ctx2d.fillText(ln, 81, base + i * 17));
+
+  ctx2d.font = 'bold 11px -apple-system, sans-serif';
+  ctx2d.fillStyle = '#ffcc00';
+  const aLines = wrapLines(sp.artist, 102, 1);
+  if (aLines[0]) ctx2d.fillText(aLines[0], 81, 112);
+}
+
+function renderSpotifyLike() {
+  const sp = latestState.spotify || {};
+  const liked = Boolean(sp.liked);
+  drawLcarsCard(liked ? '#33cc99' : '#cc99cc', 'LIKE', liked ? '#33cc99' : '#ff9900');
+  ctx2d.textAlign = 'center';
+  ctx2d.textBaseline = 'middle';
+  ctx2d.font = 'bold 40px -apple-system, sans-serif';
+  ctx2d.fillStyle = liked ? '#33cc99' : '#ff9900';
+  ctx2d.fillText(liked ? '♥' : '♡', 80, 68);
+  ctx2d.font = 'bold 12px -apple-system, sans-serif';
+  ctx2d.fillStyle = '#ffffff';
+  ctx2d.fillText(liked ? 'LIKED' : 'SAVE', 80, 106);
+}
+
+function renderLcarsClock() {
+  const now = new Date();
+  const h24 = now.getHours();
+  const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  const ss = String(now.getSeconds()).padStart(2, '0');
+  const ampm = h24 >= 12 ? 'PM' : 'AM';
+  const stardate = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}`;
+  drawLcarsCard('#ff9900', `SD ${stardate}`, '#cc99cc');
+  ctx2d.textAlign = 'center';
+  ctx2d.textBaseline = 'middle';
+  ctx2d.font = 'bold 36px -apple-system, sans-serif';
+  ctx2d.fillStyle = '#ffffff';
+  ctx2d.fillText(`${h12}:${mm}`, 80, 70);
+  ctx2d.font = 'bold 13px -apple-system, sans-serif';
+  ctx2d.fillStyle = '#ffcc00';
+  ctx2d.fillText(`${ss} ${ampm}`, 80, 104);
+}
+
+function renderLcarsDate() {
+  const now = new Date();
+  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+  const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+  drawLcarsCard('#9999ff', `${months[now.getMonth()]} ${now.getFullYear()}`, '#cc99cc');
+  ctx2d.textAlign = 'center';
+  ctx2d.textBaseline = 'middle';
+  ctx2d.font = 'bold 46px -apple-system, sans-serif';
+  ctx2d.fillStyle = '#ffffff';
+  ctx2d.fillText(String(now.getDate()), 80, 70);
+  ctx2d.font = 'bold 14px -apple-system, sans-serif';
+  ctx2d.fillStyle = '#ff9900';
+  ctx2d.fillText(days[now.getDay()], 80, 106);
+}
+
+function renderLcarsWeather() {
+  const w = latestState.weather || {};
+  const city = (w.city || 'WEATHER').toUpperCase().slice(0, 11);
+  drawLcarsCard('#66ccff', city, '#ff9900');
+  ctx2d.textAlign = 'center';
+  ctx2d.textBaseline = 'middle';
+  if (!w.tempF) {
+    ctx2d.font = 'bold 14px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#9999cc';
+    ctx2d.fillText('LOADING...', 80, 78);
+    return;
+  }
+  ctx2d.font = 'bold 38px -apple-system, sans-serif';
+  ctx2d.fillStyle = '#ffffff';
+  ctx2d.fillText(`${w.tempF}°F`, 80, 64);
+  ctx2d.font = 'bold 11px -apple-system, sans-serif';
+  ctx2d.fillStyle = '#ffcc00';
+  ctx2d.fillText(wrapLines(w.cond || '', 104, 1)[0] || '', 80, 94);
+  if (w.highF && w.lowF) {
+    ctx2d.font = 'bold 11px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#9999cc';
+    ctx2d.fillText(`H:${w.highF}° L:${w.lowF}°`, 80, 112);
+  }
+}
+
+function renderSimpleBtn(label, sub, border, fg) {
+  drawLcarsCard(border || '#9999ff', sub || label, '#ff9900');
+  ctx2d.textAlign = 'center';
+  ctx2d.textBaseline = 'middle';
+  ctx2d.font = 'bold 34px -apple-system, sans-serif';
+  ctx2d.fillStyle = fg || '#ffffff';
+  ctx2d.fillText(label, 80, 78);
+}
+
+function renderMeet(kind) {
+  const inMeet = Boolean(latestState.apps?.meet?.running);
+  const ms = latestState.apps?.meetState || {};
+  const names = { focus: 'MEET', mic: 'MIC', cam: 'CAM', hand: 'HAND' };
+  const label = names[kind] || 'MEET';
+  if (!inMeet) {
+    drawLcarsCard('#475569', label, '#334155');
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    ctx2d.font = 'bold 14px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#64748b';
+    ctx2d.fillText('NO CALL', 80, 78);
+    return;
+  }
+  if (kind === 'focus') {
+    drawLcarsCard('#33cc99', 'MEET', '#ff9900');
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    ctx2d.font = 'bold 18px -apple-system, sans-serif';
+    ctx2d.fillStyle = '#33cc99';
+    ctx2d.fillText('IN CALL', 80, 78);
+    return;
+  }
+  if (kind === 'mic') {
+    const on = Boolean(ms.micOn);
+    drawLcarsCard(on ? '#33cc99' : '#ff4444', 'MIC', on ? '#33cc99' : '#ff4444');
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    ctx2d.font = 'bold 22px -apple-system, sans-serif';
+    ctx2d.fillStyle = on ? '#33cc99' : '#ff6666';
+    ctx2d.fillText(on ? 'LIVE' : 'MUTED', 80, 78);
+    return;
+  }
+  if (kind === 'cam') {
+    const on = Boolean(ms.camOn);
+    drawLcarsCard(on ? '#33cc99' : '#ff4444', 'CAM', on ? '#33cc99' : '#ff4444');
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    ctx2d.font = 'bold 22px -apple-system, sans-serif';
+    ctx2d.fillStyle = on ? '#33cc99' : '#ff6666';
+    ctx2d.fillText(on ? 'ON' : 'OFF', 80, 78);
+    return;
+  }
+  if (kind === 'hand') {
+    const up = Boolean(ms.handRaised);
+    drawLcarsCard(up ? '#ffcc00' : '#9999cc', 'HAND', up ? '#ff9900' : '#666699', up);
+    ctx2d.textAlign = 'center';
+    ctx2d.textBaseline = 'middle';
+    ctx2d.font = 'bold 18px -apple-system, sans-serif';
+    ctx2d.fillStyle = up ? '#ffcc00' : '#9999cc';
+    ctx2d.fillText(up ? 'RAISED' : 'LOWERED', 80, 78);
+  }
+}
+
+function renderContext(ctxId, info) {
+  const { action } = info;
+  let key = '';
+  if (action === 'com.plbogen.lcarsdock.app.messages') {
+    const app = latestState.apps?.messages || {};
+    key = JSON.stringify(['messages', app, blinkPhase]);
+    if (lastKeys.get(ctxId) === key) return;
+    renderApp('Android', 'Msgs', app, '#2563eb', '#1e3a8a');
+  } else if (action === 'com.plbogen.lcarsdock.app.gmail') {
+    const app = latestState.apps?.gmail || {};
+    const gm = latestState.workspace?.gmail || {};
+    key = JSON.stringify(['gmail', app, gm, blinkPhase]);
+    if (lastKeys.get(ctxId) === key) return;
+    renderGmail();
+  } else if (action === 'com.plbogen.lcarsdock.app.calendar') {
+    const cal = latestState.workspace?.calendar || {};
+    key = JSON.stringify(['calendar', cal, blinkPhase]);
+    if (lastKeys.get(ctxId) === key) return;
+    renderCalendar();
+  } else if (action === 'com.plbogen.lcarsdock.spotify.nowplaying') {
+    const sp = latestState.spotify || {};
+    key = JSON.stringify([sp.running, sp.playing, sp.track, sp.artist, artReady, artUrlLoaded]);
+    if (lastKeys.get(ctxId) === key) return;
+    renderSpotifyNowPlaying();
+  } else if (action === 'com.plbogen.lcarsdock.spotify.prev') {
+    key = 'prev';
+    if (lastKeys.get(ctxId) === key) return;
+    renderSimpleBtn('⏮', 'PREV', '#9999ff', '#ffffff');
+  } else if (action === 'com.plbogen.lcarsdock.spotify.next') {
+    const sp = latestState.spotify || {};
+    key = JSON.stringify(['next', sp.nextTrack, sp.nextArtist]);
+    if (lastKeys.get(ctxId) === key) return;
+    if (sp.nextTrack) {
+      drawLcarsCard('#9999ff', 'NEXT ⏭', '#ff9900');
+      ctx2d.textAlign = 'center';
+      ctx2d.textBaseline = 'middle';
+      ctx2d.font = 'bold 14px -apple-system, sans-serif';
+      ctx2d.fillStyle = '#ffffff';
+      const lines = wrapLines(sp.nextTrack, 102, 2);
+      const sy = lines.length === 1 ? 72 : 62;
+      lines.forEach((ln, i) => ctx2d.fillText(ln, 81, sy + i * 19));
+      if (sp.nextArtist) {
+        ctx2d.font = '12px -apple-system, sans-serif';
+        ctx2d.fillStyle = '#cc99cc';
+        ctx2d.fillText(wrapLines(sp.nextArtist, 102, 1)[0] || '', 81, 108);
+      }
+    } else {
+      renderSimpleBtn('⏭', 'NEXT', '#9999ff', '#ffffff');
+    }
+  } else if (action === 'com.plbogen.lcarsdock.spotify.like') {
+    const sp = latestState.spotify || {};
+    key = JSON.stringify(['like', sp.track, sp.liked]);
+    if (lastKeys.get(ctxId) === key) return;
+    renderSpotifyLike();
+  } else if (action.startsWith('com.plbogen.lcarsdock.meet.')) {
+    const kind = action.split('.').pop();
+    key = JSON.stringify([kind, latestState.apps?.meet?.running, latestState.apps?.meetState]);
+    if (lastKeys.get(ctxId) === key) return;
+    renderMeet(kind);
+  } else if (action === 'com.plbogen.lcarsdock.widget.clock') {
+    const now = new Date();
+    key = `clk:${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`;
+    if (lastKeys.get(ctxId) === key) return;
+    renderLcarsClock();
+  } else if (action === 'com.plbogen.lcarsdock.widget.date') {
+    const now = new Date();
+    key = `dt:${now.getFullYear()}-${now.getMonth()}-${now.getDate()}`;
+    if (lastKeys.get(ctxId) === key) return;
+    renderLcarsDate();
+  } else if (action === 'com.plbogen.lcarsdock.widget.weather') {
+    key = JSON.stringify(['wx', latestState.weather]);
+    if (lastKeys.get(ctxId) === key) return;
+    renderLcarsWeather();
+  } else {
+    return;
+  }
+
+  lastKeys.set(ctxId, key);
+  try {
+    const dataUrl = canvas.toDataURL('image/png');
+    if (sdWs && sdWs.readyState === 1) {
+      sdWs.send(JSON.stringify({ event: 'setImage', context: ctxId, payload: { image: dataUrl, target: 0 } }));
+    }
+  } catch {}
+}
+
+function renderAll() {
+  for (const [ctxId, info] of contexts.entries()) {
+    renderContext(ctxId, info);
+  }
+}
+
+async function pollState() {
+  try {
+    const res = await fetch(BRIDGE + '/state', { cache: 'no-store' });
+    if (!res.ok) return;
+    latestState = await res.json();
+    const url = latestState.spotify?.artworkUrl || '';
+    if (url !== artUrlLoaded) {
+      artUrlLoaded = url;
+      artReady = false;
+      artImg = null;
+      if (url) {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => { artImg = img; artReady = true; renderAll(); };
+        img.onerror = () => { artReady = false; };
+        img.src = url;
+      }
+    }
+    renderAll();
+  } catch {}
+}
+
+async function sendAction(body) {
+  try {
+    await fetch(BRIDGE + '/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    setTimeout(pollState, 260);
+  } catch {}
+}
+
+function handleKeyDown(ev) {
+  const { action } = ev;
+  if (action === 'com.plbogen.lcarsdock.app.messages') {
+    sendAction({ action: 'focus_app', target: 'messages' });
+  } else if (action === 'com.plbogen.lcarsdock.app.gmail') {
+    sendAction({ action: 'focus_app', target: 'gmail' });
+  } else if (action === 'com.plbogen.lcarsdock.app.calendar') {
+    sendAction({ action: 'focus_app', target: 'calendar' });
+  } else if (action === 'com.plbogen.lcarsdock.spotify.nowplaying') {
+    sendAction({ action: 'spotify_play_pause' });
+  } else if (action === 'com.plbogen.lcarsdock.spotify.prev') {
+    sendAction({ action: 'spotify_prev' });
+  } else if (action === 'com.plbogen.lcarsdock.spotify.next') {
+    sendAction({ action: 'spotify_next' });
+  } else if (action === 'com.plbogen.lcarsdock.spotify.like') {
+    sendAction({ action: 'spotify_like' });
+  } else if (action === 'com.plbogen.lcarsdock.meet.focus') {
+    sendAction({ action: 'meet_focus' });
+  } else if (action === 'com.plbogen.lcarsdock.meet.mic') {
+    sendAction({ action: 'meet_mic' });
+  } else if (action === 'com.plbogen.lcarsdock.meet.cam') {
+    sendAction({ action: 'meet_cam' });
+  } else if (action === 'com.plbogen.lcarsdock.meet.hand') {
+    sendAction({ action: 'meet_hand' });
+  } else if (action === 'com.plbogen.lcarsdock.widget.date') {
+    sendAction({ action: 'focus_app', target: 'calendar' });
+  } else if (action === 'com.plbogen.lcarsdock.widget.weather') {
+    sendAction({ action: 'weather_refresh' });
+  }
+}
+
+window.connectElgatoStreamDeckSocket = function(inPort, inPluginUUID, inRegisterEvent) {
+  sdWs = new WebSocket('ws://127.0.0.1:' + inPort);
+  sdWs.onopen = () => {
+    sdWs.send(JSON.stringify({ event: inRegisterEvent, uuid: inPluginUUID }));
+    pollState();
+  };
+  sdWs.onmessage = (msg) => {
+    let ev = null;
+    try { ev = JSON.parse(msg.data); } catch { return; }
+    if (!ev || !ev.event) return;
+    if (ev.event === 'willAppear') {
+      contexts.set(ev.context, { action: ev.action, settings: ev.payload?.settings || {} });
+      lastKeys.delete(ev.context);
+      renderAll();
+    } else if (ev.event === 'willDisappear') {
+      contexts.delete(ev.context);
+      lastKeys.delete(ev.context);
+    } else if (ev.event === 'keyDown') {
+      handleKeyDown(ev);
+    }
+  };
+  setInterval(pollState, 1000);
+  setInterval(() => { blinkPhase = !blinkPhase; renderAll(); }, 750);
+};
+</script>
+</body>
+</html>
