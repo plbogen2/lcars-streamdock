@@ -374,7 +374,12 @@ function renderMeet(kind) {
 function renderContext(ctxId, info) {
   const { action } = info;
   let key = '';
-  if (action === 'com.plbogen.lcarsdock.app.messages') {
+  if (action === 'com.plbogen.lcarsdock.app.chat') {
+    const app = latestState.apps?.chat || {};
+    key = JSON.stringify(['chat', app, blinkPhase]);
+    if (lastKeys.get(ctxId) === key) return;
+    renderApp('Google', 'Chat', app, '#16a34a', '#14532d');
+  } else if (action === 'com.plbogen.lcarsdock.app.messages') {
     const app = latestState.apps?.messages || {};
     key = JSON.stringify(['messages', app, blinkPhase]);
     if (lastKeys.get(ctxId) === key) return;
@@ -498,7 +503,9 @@ async function sendAction(body) {
 
 function handleKeyDown(ev) {
   const { action } = ev;
-  if (action === 'com.plbogen.lcarsdock.app.messages') {
+  if (action === 'com.plbogen.lcarsdock.app.chat') {
+    sendAction({ action: 'focus_app', target: 'chat' });
+  } else if (action === 'com.plbogen.lcarsdock.app.messages') {
     sendAction({ action: 'focus_app', target: 'messages' });
   } else if (action === 'com.plbogen.lcarsdock.app.gmail') {
     sendAction({ action: 'focus_app', target: 'gmail' });

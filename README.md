@@ -5,7 +5,7 @@ Star Trek LCARS-themed StreamDock plugin (`com.plbogen.lcarsdock.sdPlugin`) for 
 ## Included Actions
 - **Spotify**: `Now Playing` (live album art, track/artist, play/pause), `Previous`, `Next` (upcoming queue preview), `Like` (live liked status + toggle).
 - **Google Meet**: `Meet Window` (focus/minimize call tab), `Meet Mic` (live mute state + toggle), `Meet Camera` (live cam state + toggle), `Meet Hand` (live raised state + toggle).
-- **Android Messages**: Live unread count from `messages.google.com/web` + focus on press.
+- **Google Chat & Android Messages**: Live unread counts from `chat.google.com` and `messages.google.com/web` + focus on press.
 - **Gmail & Calendar**: Live unread/tab status + focus on press.
 - **LCARS Widgets**: `LCARS Clock` (stardate + time), `LCARS Date`, and `LCARS Weather` (local temperature, condition, high/low).
 

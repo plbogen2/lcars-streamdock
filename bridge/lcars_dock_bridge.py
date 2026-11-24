@@ -40,6 +40,11 @@ return ""
 '''
 
 APP_TARGETS: Dict[str, Dict[str, Any]] = {
+    "chat": {
+        "app_path": os.path.expanduser("~/Applications/Chrome Apps.localized/Google Chat.app"),
+        "patterns": ("chat.google.com", "mail.google.com/chat"),
+        "url": "https://chat.google.com",
+    },
     "messages": {
         "app_path": os.path.expanduser("~/Applications/Chrome Apps.localized/Messages.app"),
         "patterns": ("messages.google.com",),
@@ -251,7 +256,7 @@ return "NO_MEET"
 def poll_apps() -> Dict[str, Any]:
     apps: Dict[str, Any] = {
         k: {"running": False, "notify": False, "count": ""}
-        for k in ("messages", "gmail", "calendar", "meet")
+        for k in ("chat", "messages", "gmail", "calendar", "meet")
     }
     try:
         tab_out = subprocess.check_output(
@@ -261,6 +266,7 @@ def poll_apps() -> Dict[str, Any]:
         tab_out = ""
 
     url_map = (
+        ("chat", ("chat.google.com", "mail.google.com/chat")),
         ("messages", ("messages.google.com",)),
         ("gmail", ("mail.google.com",)),
         ("calendar", ("calendar.google.com",)),
@@ -308,6 +314,34 @@ def poll_apps() -> Dict[str, Any]:
                 n = int(cnt_out)
                 apps["messages"]["notify"] = n > 0
                 apps["messages"]["count"] = str(n) if n > 0 else ""
+        except Exception:
+            pass
+
+    if apps["chat"]["running"]:
+        try:
+            chat_js = "Array.from(document.querySelectorAll('[role=treeitem]')).filter(e => /unread/i.test(e.getAttribute('aria-label') || '')).length"
+            chat_script = (
+                'if application "Google Chrome" is running then\n'
+                '  tell application "Google Chrome"\n'
+                '    repeat with w in windows\n'
+                '      repeat with t in tabs of w\n'
+                '        if (URL of t) contains "chat.google.com" then\n'
+                f'          return execute t javascript "{chat_js}"\n'
+                '        end if\n'
+                '      end repeat\n'
+                '    end repeat\n'
+                '  end tell\n'
+                'end if\n'
+                'return ""\n'
+            )
+            chat_out = subprocess.check_output(
+                ["/usr/bin/osascript", "-e", chat_script], stderr=subprocess.DEVNULL, text=True, timeout=2.0
+            ).strip()
+            if chat_out.isdigit():
+                apps["chat"]["hasCount"] = True
+                n = int(chat_out)
+                apps["chat"]["notify"] = n > 0
+                apps["chat"]["count"] = str(n) if n > 0 else ""
         except Exception:
             pass
 

@@ -1,6 +1,16 @@
 {
   "Actions": [
     {
+      "UUID": "com.plbogen.lcarsdock.app.chat",
+      "Name": "Google Chat",
+      "Icon": "icons/chat.png",
+      "Tooltip": "Live Google Chat unread count; press to focus",
+      "Controllers": ["Keypad", "Information"],
+      "UserTitleEnabled": false,
+      "SupportedInMultiActions": true,
+      "States": [{ "Image": "icons/chat.png" }]
+    },
+    {
       "UUID": "com.plbogen.lcarsdock.app.messages",
       "Name": "Android Messages",
       "Icon": "icons/messages.png",
